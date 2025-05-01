@@ -1,13 +1,11 @@
-
-
 services:
   # API Service
   api:
     build:
       context: ../harmanagelApi2/aspnet-core
-      dockerfile: Dockerfile
+      dockerfile: ./Dockerfile
     ports:
-      - "${API_PORT}:80"
+      - "${API_PORT_HTTPS}:443"
     depends_on:
       - postgres
       - elasticsearch
@@ -16,6 +14,16 @@ services:
       - ConnectionStrings__Default=${API_DB_CONNECTION}
       - Elasticsearch__Url=${ELASTICSEARCH_URL}
       - Kafka__BootstrapServers=${KAFKA_BOOTSTRAP_SERVERS}
+      - AuthServer__Authority=https://localhost:${API_PORT_HTTPS}
+      - AuthServer__RequireHttpsMetadata=true
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=2576076Sa
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
+    networks:
+      - harmanagel-network
+    volumes:
+      - aspnet_data_protection:/root/.aspnet/DataProtection-Keys
+      - ../harmanagelApi2/aspnet-core/https:/https:ro
 
   # Angular UI Service
   ui:
@@ -26,18 +34,23 @@ services:
       - "${UI_PORT}:80"
     depends_on:
       - api
+    networks:
+      - harmanagel-network
 
   # PostgreSQL
   postgres:
-    image: postgres:14
+    image: postgres:latest
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - harmanagel-network
 
   # Elasticsearch
   elasticsearch:
@@ -49,6 +62,8 @@ services:
       - "${ELASTICSEARCH_PORT}:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - harmanagel-network
 
   # Kibana
   kibana:
@@ -59,6 +74,8 @@ services:
       - elasticsearch
     environment:
       ELASTICSEARCH_HOSTS: ${ELASTICSEARCH_URL}
+    networks:
+      - harmanagel-network
 
   # Zookeeper
   zookeeper:
@@ -68,6 +85,8 @@ services:
       ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME}
     ports:
       - "${ZOOKEEPER_CLIENT_PORT}:2181"
+    networks:
+      - harmanagel-network
 
   # Kafka
   kafka:
@@ -83,6 +102,8 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_REPLICATION_FACTOR}
+    networks:
+      - harmanagel-network
 
   # Kafka UI
   kafka-ui:
@@ -96,7 +117,25 @@ services:
     depends_on:
       - kafka
       - zookeeper
+    networks:
+      - harmanagel-network
+  
+  migrator:
+    build:
+      context: ../harmanagelApi2/aspnet-core
+      dockerfile: src/HarmanaGel.DbMigrator/Dockerfile
+    depends_on:
+      - postgres
+    environment:
+      - ConnectionStrings__Default=${API_DB_CONNECTION}
+    networks:
+      - harmanagel-network
 
 volumes:
   postgres_data:
   elasticsearch_data:
+  aspnet_data_protection:
+
+networks:
+  harmanagel-network:
+    driver: bridge
