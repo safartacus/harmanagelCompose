@@ -16,14 +16,13 @@ services:
       - Kafka__BootstrapServers=${KAFKA_BOOTSTRAP_SERVERS}
       - AuthServer__Authority=https://localhost:${API_PORT_HTTPS}
       - AuthServer__RequireHttpsMetadata=true
-      - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_Kestrel__Certificates__Default__Password=2576076Sa
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
-    networks:
-      - harmanagel-network
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=authserver.pfx
+      - OpenIddict__Applications__HarmanaGel_Swagger__RootUrl=https://localhost:${API_PORT_HTTPS}
     volumes:
       - aspnet_data_protection:/root/.aspnet/DataProtection-Keys
-      - ../harmanagelApi2/aspnet-core/https:/https:ro
+    networks:
+      - harmanagel-network
 
   # Angular UI Service
   ui:
