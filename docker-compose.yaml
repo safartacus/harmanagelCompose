@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ../harmanagelApi2/aspnet-core
+      dockerfile: Dockerfile
+    container_name: api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Default=${DB_CONNECTION_STRING}
+      - Elasticsearch__Url=${ELASTICSEARCH_URL}
+      - Elasticsearch__IndexFormat=${ELASTICSEARCH_INDEX_FORMAT}
+      - Elasticsearch__BatchPostingLimit=${ELASTICSEARCH_BATCH_LIMIT}
+      - Elasticsearch__BatchAction=${ELASTICSEARCH_BATCH_ACTION}
+      - App__SelfUrl=${APP_SELF_URL}
+      - App__ClientUrl=${APP_CLIENT_URL}
+      - App__CorsOrigins=${APP_CLIENT_URL}
+      - App__RedirectAllowedUrls=${APP_CLIENT_URL}
+      - OpenIddict__Applications__HarmanaGel_Swagger__RootUrl=${AUTH_SERVER_URL}
+      - AuthServer__Authority=${AUTH_SERVER_URL}
+      - AuthServer__RequireHttpsMetadata=${AUTH_SERVER__RequireHttpsMetadata}
+      - AuthServer__SwaggerClientId=${AUTH_SERVER_SWAGGER_CLIENT_ID}
+    ports:
+      - "44316:44316"
+    depends_on:
+      - postgresql
+      - elasticsearch
+    networks:
+      - my-network
+    volumes:
+      - ./appsettings.Development.json:/app/appsettings.Development.json
+    restart: no
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTICSEARCH_VERSION}
+    container_name: elasticsearch
+    environment:
+      - discovery.type=${ELASTICSEARCH_DISCOVERY_TYPE}
+      - xpack.security.enabled=${ELASTICSEARCH_SECURITY_ENABLED}
+      - ELASTIC_PASSWORD=${ELASTICSEARCH_PASSWORD}
+    ports:
+      - "9200:9200"
+    networks:
+      - my-network
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: always
+
+  redis:
+    image: redis:${REDIS_VERSION}
+    container_name: redis
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "6379:6379"
+    networks:
+      - my-network
+    restart: always
+
+  kafka:
+    image: wurstmeister/kafka:${KAFKA_VERSION}
+    container_name: kafka
+    environment:
+      - KAFKA_ADVERTISED_LISTENER=PLAINTEXT://${KAFKA_HOST}:${KAFKA_PORT}
+      - KAFKA_LISTENER_SECURITY_PROTOCOL=PLAINTEXT
+      - KAFKA_LISTENER=PLAINTEXT://0.0.0.0:${KAFKA_PORT}
+      - KAFKA_LISTENER_PORT=${KAFKA_PORT}
+      - KAFKA_LISTENER_NAME=PLAINTEXT
+      - KAFKA_LISTENER_INTER_BROKER=${KAFKA_LISTENER_INTER_BROKER}
+      - KAFKA_LISTENER_INTER_BROKER_PORT=${KAFKA_PORT}
+      - KAFKA_LISTENER_SASL_MECHANISMS=PLAIN
+      - KAFKA_LISTENER_SASL_ENABLED_MECHANISMS=PLAIN
+      - KAFKA_LISTENER_SASL_JAAS_CONFIG=org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER}" password="${KAFKA_PASSWORD}";
+    ports:
+      - "${KAFKA_PORT}:${KAFKA_PORT}"
+    networks:
+      - my-network
+    restart: always
+
+  postgresql:
+    image: postgres:${POSTGRES_VERSION}
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
+    networks:
+      - my-network
+    restart: always
+  
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000" 
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USERNAME}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+
+  dbmigrator:
+    build:
+      context: ../harmanagelApi2/aspnet-core
+      dockerfile: src/HarmanaGel.DbMigrator/Dockerfile
+    container_name: dbmigrator
+    depends_on:
+      - postgresql
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Default=${DB_CONNECTION_STRING}
+    networks:
+      - my-network
+    restart: on-failure
+  
+  version: '3.8'
+
+volumes:
+  minio-data:
+
+networks:
+  my-network:
+    driver: bridge
+
+volumes:
+  elasticsearch_data:
+    driver: local
